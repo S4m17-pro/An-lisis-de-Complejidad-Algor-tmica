@@ -85,3 +85,7 @@ def selection_sort(arr):
                 min_idx = j
         resultado[i], resultado[min_idx] = resultado[min_idx], resultado[i]
     return resultado
+
+def timsort_nativo(arr):
+    # Usa la función sorted nativa de Python, que internamente usa Timsort
+    return sorted(arr)
