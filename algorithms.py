@@ -89,3 +89,47 @@ def selection_sort(arr):
 def timsort_nativo(arr):
     # Usa la función sorted nativa de Python, que internamente usa Timsort
     return sorted(arr)
+
+# --- Algoritmos de Búsqueda ---
+
+def busqueda_lineal(arr, objetivo=None):
+    """O(n) - Recorre todo el arreglo."""
+    if objetivo is None: objetivo = -1 # Caso de búsqueda fallida para benchmark
+    for i in range(len(arr)):
+        if arr[i] == objetivo:
+            return i
+    return -1
+
+def busqueda_binaria(arr_ordenado, objetivo=None):
+    """O(log n) - Divide y vencerás. Requiere arreglo ordenado."""
+    if objetivo is None: objetivo = -1
+    bajo = 0
+    alto = len(arr_ordenado) - 1
+    while bajo <= alto:
+        medio = (bajo + alto) // 2
+        if arr_ordenado[medio] < objetivo:
+            bajo = medio + 1
+        elif arr_ordenado[medio] > objetivo:
+            alto = medio - 1
+        else:
+            return medio
+    return -1
+
+# --- Ejemplos de Complejidad Exponencial vs Lineal ---
+
+def fibonacci_recursivo(n):
+    """O(2ⁿ) - Muy ineficiente para N grandes."""
+    if isinstance(n, list): n = len(n) # Adaptador para el benchmarker
+    if n <= 1:
+        return n
+    return fibonacci_recursivo(n-1) + fibonacci_recursivo(n-2)
+
+def fibonacci_iterativo(n):
+    """O(n) - Mucho más eficiente."""
+    if isinstance(n, list): n = len(n)
+    if n <= 1:
+        return n
+    a, b = 0, 1
+    for _ in range(2, n + 1):
+        a, b = b, a + b
+    return b

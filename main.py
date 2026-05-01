@@ -1,139 +1,135 @@
 import sys
-import csv
-from datetime import datetime
 from utils import generar_dataset
-from algorithms import bubble_sort, quick_sort, merge_sort, insertion_sort, selection_sort, timsort_nativo
-from benchmarker import medir_tiempo
+import algorithms
+from benchmarker import medir_tiempo, ejecutar_codigo_personalizado
 from visualizer import graficar_resultados
+from complexity_detector import estimar_complejidad
 
 from rich.console import Console
 from rich.prompt import Prompt
 from rich.progress import Progress, SpinnerColumn, TimeElapsedColumn
 from rich.table import Table
 from rich import box
+from rich.panel import Panel
 
 console = Console()
 
-TODOS_LOS_ALGORITMOS = {
-    "0": ("Timsort (Nativo Python) (O(n log n))", timsort_nativo),
-    "1": ("Bubble Sort (O(n²))", bubble_sort),
-    "2": ("Quick Sort (O(n log n))", quick_sort),
-    "3": ("Merge Sort (O(n log n))", merge_sort),
-    "4": ("Insertion Sort (O(n²))", insertion_sort),
-    "5": ("Selection Sort (O(n²))", selection_sort)
+ALGORITMOS_ORDENAMIENTO = {
+    "1": ("Bubble Sort (O(n²))", algorithms.bubble_sort),
+    "2": ("Quick Sort (O(n log n))", algorithms.quick_sort),
+    "3": ("Merge Sort (O(n log n))", algorithms.merge_sort),
+    "4": ("Insertion Sort (O(n²))", algorithms.insertion_sort),
+    "5": ("Selection Sort (O(n²))", algorithms.selection_sort),
+    "6": ("Timsort (Nativo) (O(n log n))", algorithms.timsort_nativo),
 }
 
-def main():
-    console.print("[bold blue]=================================================[/bold blue]")
-    console.print("[bold cyan]Analizador de Complejidad Algorítmica Dinámico[/bold cyan]")
-    console.print("[bold blue]=================================================[/bold blue]\n")
+ALGORITMOS_BUSQUEDA = {
+    "7": ("Búsqueda Lineal (O(n))", algorithms.busqueda_lineal),
+    "8": ("Búsqueda Binaria (O(log n))", algorithms.busqueda_binaria),
+}
 
-    # Selección de algoritmos
-    console.print("[bold yellow]Algoritmos Disponibles:[/bold yellow]")
-    for clave, (nombre, _) in TODOS_LOS_ALGORITMOS.items():
-        console.print(f"  [green]{clave}[/green] - {nombre}")
+ALGORITMOS_ESPECIALES = {
+    "9": ("Fibonacci Recursivo (O(2ⁿ))", algorithms.fibonacci_recursivo),
+    "10": ("Fibonacci Iterativo (O(n))", algorithms.fibonacci_iterativo),
+}
+
+TODOS_LOS_ALGORITMOS = {**ALGORITMOS_ORDENAMIENTO, **ALGORITMOS_BUSQUEDA, **ALGORITMOS_ESPECIALES}
+
+def mostrar_menu():
+    console.print(Panel.fit(
+        "[bold cyan] Analizador de Complejidad Algorítmica [/bold cyan]\n"
+        "[dim]Detecta el Big O de tu código y compara algoritmos clásicos[/dim]",
+        border_style="blue", box=box.DOUBLE
+    ))
+
+    table = Table(show_header=False, box=box.SIMPLE)
+    table.add_column("Cat", style="yellow")
+    table.add_column("Algs", style="green")
+
+    def format_group(group):
+        return "\n".join([f"[bold white]{k}[/bold white] - {v[0]}" for k, v in group.items()])
+
+    table.add_row("Ordenamiento", format_group(ALGORITMOS_ORDENAMIENTO))
+    table.add_row("Búsqueda", format_group(ALGORITMOS_BUSQUEDA))
+    table.add_row("Especiales", format_group(ALGORITMOS_ESPECIALES))
+    table.add_row("Personalizado", "[bold white]C[/bold white] - Ingresar mi propio código Python")
+    
+    console.print(table)
+
+def main():
+    mostrar_menu()
     
     seleccion = Prompt.ask(
-        "\nIngresa los números de los algoritmos a evaluar separados por coma (ej. 1,2,3) o presiona Enter para usar todos",
-        default="1,2,3,4,5"
-    )
+        "\nSelecciona los números (ej. 1,2,8) o 'C' para código propio",
+        default="2,3,6"
+    ).upper()
     
-    claves_seleccionadas = [s.strip() for s in seleccion.split(',') if s.strip() in TODOS_LOS_ALGORITMOS]
-    if not claves_seleccionadas:
-        console.print("[bold red]Selección inválida, usando Quick Sort y Bubble Sort por defecto.[/bold red]")
-        claves_seleccionadas = ["1", "2"]
+    es_personalizado = 'C' in seleccion
+    algoritmos_a_evaluar = {}
+    codigo_usuario = ""
 
-    algoritmos = {TODOS_LOS_ALGORITMOS[c][0]: TODOS_LOS_ALGORITMOS[c][1] for c in claves_seleccionadas}
-    
-    # Selección del tipo de caso
-    console.print("\n[bold yellow]Distribución de los Datos (Casos de Prueba):[/bold yellow]")
-    console.print("  [green]1[/green] - Aleatorio (Caso Promedio)")
-    console.print("  [green]2[/green] - Ordenado (Mejor Caso para algunos)")
-    console.print("  [green]3[/green] - Inverso (Peor Caso para algunos)")
-    
-    seleccion_caso = Prompt.ask("\nSelecciona el tipo de caso (1, 2 o 3)", default="1")
-    tipos_caso = {"1": "aleatorio", "2": "ordenado", "3": "inverso"}
-    caso_actual = tipos_caso.get(seleccion_caso.strip(), "aleatorio")
+    if es_personalizado:
+        console.print("\n[bold yellow]📝 Ingresa tu código Python (usa 'n' para el tamaño o 'data' para la lista):[/bold yellow]")
+        console.print("[dim]Ejemplo: for i in range(n): pass[/dim]")
+        codigo_usuario = Prompt.ask("Código")
+        algoritmos_a_evaluar["Código Usuario"] = lambda d: ejecutar_codigo_personalizado(codigo_usuario, d)
+    else:
+        claves = [s.strip() for s in seleccion.split(',') if s.strip() in TODOS_LOS_ALGORITMOS]
+        if not claves:
+            console.print("[bold red]Selección inválida.[/bold red]")
+            return
+        algoritmos_a_evaluar = {TODOS_LOS_ALGORITMOS[c][0]: TODOS_LOS_ALGORITMOS[c][1] for c in claves}
 
-    # Selección de tamaños
-    tamanos_input = Prompt.ask(
-        "\nIngresa los tamaños de los arreglos a evaluar separados por coma",
-        default="100, 500, 1000, 2000"
-    )
-    
-    # Preguntar por Escala Logarítmica
-    usar_escala_log_str = Prompt.ask(
-        "\n¿Deseas usar escala logarítmica en la gráfica para ver mejor los algoritmos rápidos? (s/n)",
-        default="n"
-    )
-    usar_escala_log = usar_escala_log_str.strip().lower() == 's'
+    # Configuración de tamaños
+    default_sizes = "10, 20, 25" if "9" in seleccion else "100, 500, 1000, 2000"
+    tamanos_input = Prompt.ask(f"\nTamaños de entrada (N)", default=default_sizes)
     
     try:
         tamanos = [int(t.strip()) for t in tamanos_input.split(',')]
         tamanos.sort()
     except ValueError:
-        console.print("[bold red]Entrada inválida. Usando tamaños por defecto.[/bold red]")
-        tamanos = [100, 500, 1000, 2000]
+        console.print("[bold red]Entrada inválida.[/bold red]")
+        return
 
-    resultados = {nombre: [] for nombre in algoritmos}
+    usar_escala_log = Prompt.ask("\n¿Usar escala logarítmica? (s/n)", default="n").lower() == 's'
     
-    console.print("\n[bold magenta]Iniciando Análisis de Rendimiento...[/bold magenta]\n")
+    # Ejecución
+    resultados = {nombre: [] for nombre in algoritmos_a_evaluar}
+    console.print("\n[bold magenta]Iniciando Análisis...[/bold magenta]\n")
     
-    total_pasos = len(tamanos) * len(algoritmos)
-    
-    # Progreso de ejecución
-    with Progress(
-        SpinnerColumn(),
-        *Progress.get_default_columns(),
-        TimeElapsedColumn(),
-        console=console
-    ) as progress:
-        task = progress.add_task("[cyan]Ejecutando pruebas...", total=total_pasos)
+    with Progress(SpinnerColumn(), *Progress.get_default_columns(), TimeElapsedColumn(), console=console) as progress:
+        task = progress.add_task("[cyan]Procesando...", total=len(tamanos) * len(algoritmos_a_evaluar))
         
         for tamano in tamanos:
-            progress.console.print(f"[dim]Generando dataset ({caso_actual}) de tamaño {tamano}...[/dim]")
-            dataset = generar_dataset(tamano, caso_actual)
-            
-            for nombre, funcion in algoritmos.items():
+            dataset = generar_dataset(tamano, "aleatorio")
+            if any(k in seleccion for k in ["8"]): dataset.sort() # Búsqueda binaria requiere orden
+
+            for nombre, funcion in algoritmos_a_evaluar.items():
                 tiempo = medir_tiempo(funcion, dataset)
                 resultados[nombre].append(tiempo)
                 progress.advance(task)
 
-    # Construir tabla de resultados
-    console.print("\n[bold green]Pruebas finalizadas con éxito![/bold green]")
-    
-    tabla = Table(title="Resultados de Tiempos de Ejecución (segundos)", box=box.ROUNDED)
-    tabla.add_column("Algoritmo", style="cyan", no_wrap=True)
+    # Resultados y Detección de Big O
+    tabla = Table(title="Resultados y Estimación de Complejidad", box=box.ROUNDED)
+    tabla.add_column("Algoritmo", style="cyan")
     for tamano in tamanos:
-        tabla.add_column(f"N={tamano}", justify="right")
+        tabla.add_column(f"N={tamano}")
+    tabla.add_column("Big O Estimado", style="bold yellow")
         
     for nombre, tiempos in resultados.items():
-        fila = [nombre] + [f"{t:.6f}" for t in tiempos]
+        big_o = estimar_complejidad(tamanos, tiempos)
+        fila = [nombre] + [f"{t:.6f}s" for t in tiempos] + [big_o]
         tabla.add_row(*fila)
         
     console.print(tabla)
     
-    # Exportar a CSV
-    nombre_archivo_csv = f"resultados_{caso_actual}_{datetime.now().strftime('%Y%m%d_%H%M%S')}.csv"
-    try:
-        with open(nombre_archivo_csv, mode='w', newline='') as file:
-            writer = csv.writer(file)
-            encabezados = ["Algoritmo"] + [f"N={t}" for t in tamanos]
-            writer.writerow(encabezados)
-            for nombre, tiempos in resultados.items():
-                fila = [nombre] + [f"{t:.6f}" for t in tiempos]
-                writer.writerow(fila)
-        console.print(f"[bold green][+] Resultados exportados a CSV: {nombre_archivo_csv}[/bold green]")
-    except Exception as e:
-        console.print(f"[bold red]Error al guardar CSV: {e}[/bold red]")
-
-    console.print("\n[bold cyan]Generando gráfico comparativo...[/bold cyan]")
+    # Gráfico
     graficar_resultados(resultados, tamanos, escala_logaritmica=usar_escala_log)
 
 if __name__ == "__main__":
     try:
         main()
-        Prompt.ask("\n[bold yellow]Presiona Enter para salir y cerrar el gráfico...[/bold yellow]")
+        Prompt.ask("\n[bold yellow]Presiona Enter para finalizar...[/bold yellow]")
     except KeyboardInterrupt:
-        console.print("\n[bold red]Ejecución cancelada por el usuario.[/bold red]")
+        console.print("\n[bold red]Cancelado.[/bold red]")
         sys.exit(0)
