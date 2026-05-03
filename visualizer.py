@@ -3,11 +3,11 @@ matplotlib.use('QtAgg') # Usar PyQt6 para mostrar el panel interactivo directame
 import matplotlib.pyplot as plt
 import seaborn as sns
 
-def graficar_resultados(resultados, tamanos, escala_logaritmica=False, archivo_salida="complejidad.png"):
+def graficar_resultados(resultados, tamanos, escala_logaritmica=False, archivo_salida="complejidad.png", return_fig=False):
     # Configurar estilo Seaborn
     sns.set_theme(style="darkgrid")
     
-    plt.figure(figsize=(12, 7))
+    fig = plt.figure(figsize=(12, 7))
     
     # Paleta de colores atractiva
     colores = sns.color_palette("husl", len(resultados))
@@ -35,6 +35,10 @@ def graficar_resultados(resultados, tamanos, escala_logaritmica=False, archivo_s
     plt.legend(fontsize=12, loc='upper left', frameon=True, shadow=True, borderpad=1)
 
     plt.tight_layout()
+    
+    if return_fig:
+        return fig
+        
     plt.savefig(archivo_salida, dpi=300)
     plt.show(block=False) # Mostrar panel interactivo
     print(f"\n[+] Gráfico guardado exitosamente como '{archivo_salida}'.")
