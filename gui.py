@@ -2,12 +2,12 @@ import sys
 import traceback
 from PyQt6.QtWidgets import (
     QApplication, QMainWindow, QWidget, QVBoxLayout, QHBoxLayout,
-    QLabel, QComboBox, QTextEdit, QLineEdit, QCheckBox, QPushButton,
-    QTableWidget, QTableWidgetItem, QHeaderView, QSplitter, QMessageBox,
-    QFrame
+    QLabel, QListWidget, QListWidgetItem, QTextEdit, QLineEdit, 
+    QCheckBox, QPushButton, QTableWidget, QTableWidgetItem, 
+    QHeaderView, QSplitter, QMessageBox, QFrame, QProgressBar
 )
-from PyQt6.QtCore import Qt, QThread, pyqtSignal
-from PyQt6.QtGui import QFont, QColor, QPalette
+from PyQt6.QtCore import Qt, QThread, pyqtSignal, QSize
+from PyQt6.QtGui import QFont, QColor, QPalette, QIcon
 
 import matplotlib
 matplotlib.use('QtAgg')
@@ -20,9 +20,8 @@ from benchmarker import medir_tiempo, ejecutar_codigo_personalizado
 from complexity_detector import estimar_complejidad
 from visualizer import graficar_resultados
 
-# Mapeo de algoritmos para el ComboBox
+# Mapeo de algoritmos
 ALGORITMOS_EJEMPLO = {
-    "Código Personalizado": None,
     "Bubble Sort (O(n²))": algorithms.bubble_sort,
     "Quick Sort (O(n log n))": algorithms.quick_sort,
     "Merge Sort (O(n log n))": algorithms.merge_sort,
@@ -35,19 +34,14 @@ ALGORITMOS_EJEMPLO = {
     "Fibonacci Iterativo (O(n))": algorithms.fibonacci_iterativo,
 }
 
-EJEMPLO_CODIGO_PERSONALIZADO = """# Ingresa tu código aquí
-# Usa 'data' para acceder al arreglo generado
-# o 'n' para el tamaño del arreglo.
-
-# Ejemplo (Bucle simple):
+EJEMPLO_CODIGO_PERSONALIZADO = """# Código Personalizado (data: lista, n: tamaño)
 for i in range(n):
     pass
 """
 
 class WorkerThread(QThread):
-    # Señales para comunicar progreso y resultados al hilo principal
-    progress_signal = pyqtSignal(str)
-    result_signal = pyqtSignal(object, list) # resultados dict, tamanos list
+    progress_signal = pyqtSignal(int, str) # progreso %, mensaje
+    result_signal = pyqtSignal(dict, list) # resultados dict, tamanos list
     error_signal = pyqtSignal(str)
 
     def __init__(self, config):
@@ -56,271 +50,247 @@ class WorkerThread(QThread):
 
     def run(self):
         try:
-            nombre_algoritmo = self.config['nombre']
-            funcion_algoritmo = self.config['funcion']
+            algoritmos_seleccionados = self.config['algoritmos']
+            incluir_personalizado = self.config['incluir_personalizado']
             codigo_personalizado = self.config['codigo']
             tamanos = self.config['tamanos']
 
-            resultados = {nombre_algoritmo: []}
+            resultados = {}
             
-            for tamano in tamanos:
-                self.progress_signal.emit(f"Procesando N={tamano}...")
-                dataset = generar_dataset(tamano, "aleatorio")
-                
-                # Para búsqueda binaria necesitamos orden
-                if "Binaria" in nombre_algoritmo:
-                    dataset.sort()
+            # Preparar lista de tareas
+            tareas = []
+            for nombre, func in algoritmos_seleccionados.items():
+                tareas.append((nombre, func))
+            if incluir_personalizado:
+                tareas.append(("Código Personalizado", None))
 
-                if funcion_algoritmo is None:
-                    # Código personalizado
-                    tiempo = ejecutar_codigo_personalizado(codigo_personalizado, dataset)
-                else:
-                    # Algoritmo clásico
-                    tiempo = medir_tiempo(funcion_algoritmo, dataset)
+            total_pasos = len(tamanos) * len(tareas)
+            paso_actual = 0
+
+            for tamano in tamanos:
+                dataset_base = generar_dataset(tamano, "aleatorio")
                 
-                resultados[nombre_algoritmo].append(tiempo)
+                for nombre, funcion in tareas:
+                    msg = f"Ejecutando {nombre} (N={tamano})..."
+                    self.progress_signal.emit(int((paso_actual / total_pasos) * 100), msg)
+                    
+                    if nombre not in resultados:
+                        resultados[nombre] = []
+
+                    # Preparar dataset específico
+                    if "Binaria" in nombre:
+                        dataset_actual = sorted(dataset_base)
+                    elif any(x in nombre for x in ["Fibonacci", "Recursivo", "Iterativo"]):
+                        dataset_actual = tamano
+                    else:
+                        dataset_actual = dataset_base[:]
+
+                    if funcion is None: # Código personalizado
+                        tiempo = ejecutar_codigo_personalizado(codigo_personalizado, dataset_actual)
+                    else:
+                        tiempo = medir_tiempo(funcion, dataset_actual)
+                    
+                    resultados[nombre].append(tiempo)
+                    paso_actual += 1
 
             self.result_signal.emit(resultados, tamanos)
 
         except Exception as e:
-            error_trace = traceback.format_exc()
-            self.error_signal.emit(f"Error durante la ejecución:\n{str(e)}\n\nTraceback:\n{error_trace}")
+            self.error_signal.emit(str(e) + "\n" + traceback.format_exc())
 
 
 class AnalizadorGUI(QMainWindow):
     def __init__(self):
         super().__init__()
-        self.setWindowTitle("Analizador de Complejidad Algorítmica")
-        self.resize(1200, 800)
+        self.setWindowTitle("🚀 Analizador de Complejidad Algorítmica")
+        self.setMinimumSize(1280, 850)
         self.aplicar_estilos()
         self.init_ui()
 
     def aplicar_estilos(self):
-        # Estilo oscuro brutalista/moderno
         self.setStyleSheet("""
-            QMainWindow {
-                background-color: #121212;
+            QMainWindow { background-color: #0F172A; }
+            QWidget { font-family: 'Segoe UI', system-ui, sans-serif; color: #F8FAFC; }
+            
+            QFrame#ControlPanel { 
+                background-color: #1E293B; 
+                border-radius: 12px; 
+                border: 1px solid #334155;
             }
-            QWidget {
-                font-family: 'Inter', 'Segoe UI', sans-serif;
-                color: #E0E0E0;
+            
+            QLabel#Title { font-size: 20px; font-weight: 800; color: #38BDF8; margin-bottom: 10px; }
+            QLabel#Sub { color: #94A3B8; font-size: 13px; font-weight: 400; }
+            
+            QListWidget {
+                background-color: #0F172A;
+                border: 1px solid #334155;
+                border-radius: 8px;
+                padding: 5px;
+                outline: none;
             }
-            QLabel {
-                font-size: 14px;
-                font-weight: bold;
-                color: #FFFFFF;
-                margin-bottom: 5px;
+            QListWidget::item { padding: 8px; border-radius: 4px; margin: 2px; }
+            QListWidget::item:hover { background-color: #1E293B; }
+            QListWidget::item:selected { background-color: #38BDF8; color: #0F172A; font-weight: bold; }
+            
+            QLineEdit, QTextEdit {
+                background-color: #0F172A;
+                border: 1px solid #334155;
+                border-radius: 8px;
+                padding: 10px;
+                selection-background-color: #38BDF8;
             }
-            QComboBox, QLineEdit, QTextEdit {
-                background-color: #1E1E1E;
-                border: 2px solid #333333;
-                border-radius: 6px;
-                padding: 8px;
-                font-size: 14px;
-                color: #FFFFFF;
-            }
-            QComboBox::drop-down {
-                border: none;
-            }
-            QComboBox QAbstractItemView {
-                background-color: #1E1E1E;
-                color: #FFFFFF;
-                selection-background-color: #2D5DA1;
-            }
-            QTextEdit {
-                font-family: 'Consolas', 'Courier New', monospace;
-            }
-            QLineEdit:focus, QTextEdit:focus, QComboBox:focus {
-                border: 2px solid #4A90E2;
-            }
-            QPushButton {
-                background-color: #4A90E2;
+            
+            QPushButton#ActionBtn {
+                background-color: #0EA5E9;
                 color: white;
-                border: none;
-                border-radius: 6px;
-                padding: 12px 20px;
-                font-size: 15px;
+                border-radius: 8px;
+                padding: 15px;
+                font-size: 14px;
                 font-weight: bold;
+                text-transform: uppercase;
             }
-            QPushButton:hover {
-                background-color: #357ABD;
-            }
-            QPushButton:disabled {
-                background-color: #555555;
-                color: #888888;
-            }
+            QPushButton#ActionBtn:hover { background-color: #0284C7; }
+            QPushButton#ActionBtn:pressed { background-color: #075985; }
+            QPushButton#ActionBtn:disabled { background-color: #334155; color: #64748B; }
+            
             QTableWidget {
-                background-color: #1E1E1E;
-                alternate-background-color: #252525;
-                gridline-color: #333333;
-                border: 1px solid #333333;
-                border-radius: 6px;
-                color: #FFFFFF;
-                font-size: 13px;
+                background-color: #1E293B;
+                border: 1px solid #334155;
+                border-radius: 8px;
+                gridline-color: #334155;
             }
             QHeaderView::section {
-                background-color: #2D2D2D;
-                color: white;
-                padding: 6px;
-                border: 1px solid #333333;
+                background-color: #334155;
+                color: #F8FAFC;
+                padding: 10px;
+                border: none;
                 font-weight: bold;
             }
-            QCheckBox {
-                font-size: 14px;
+            
+            QProgressBar {
+                border: 1px solid #334155;
+                border-radius: 5px;
+                text-align: center;
+                background-color: #0F172A;
             }
-            QCheckBox::indicator {
-                width: 18px;
-                height: 18px;
-                border: 2px solid #555;
-                border-radius: 4px;
-                background-color: #1E1E1E;
-            }
-            QCheckBox::indicator:checked {
-                background-color: #4A90E2;
-                border: 2px solid #4A90E2;
-            }
+            QProgressBar::chunk { background-color: #38BDF8; border-radius: 4px; }
         """)
 
     def init_ui(self):
-        central_widget = QWidget()
-        self.setCentralWidget(central_widget)
-        main_layout = QHBoxLayout(central_widget)
+        central = QWidget()
+        self.setCentralWidget(central)
+        main_layout = QHBoxLayout(central)
         main_layout.setContentsMargins(20, 20, 20, 20)
         main_layout.setSpacing(20)
 
-        # Usar un Splitter para permitir ajustar el ancho de los paneles
         splitter = QSplitter(Qt.Orientation.Horizontal)
         main_layout.addWidget(splitter)
 
-        # ================= PANEL IZQUIERDO (CONTROLES) =================
-        left_panel = QWidget()
+        # --- PANEL IZQUIERDO ---
+        left_panel = QFrame()
+        left_panel.setObjectName("ControlPanel")
         left_layout = QVBoxLayout(left_panel)
-        left_layout.setContentsMargins(0, 0, 0, 0)
+        left_layout.setContentsMargins(20, 20, 20, 20)
         left_layout.setSpacing(15)
 
-        # Título
-        title_lbl = QLabel("CONFIGURACIÓN DE ANÁLISIS")
-        title_lbl.setStyleSheet("font-size: 18px; color: #4A90E2; margin-bottom: 10px;")
-        left_layout.addWidget(title_lbl)
+        left_layout.addWidget(QLabel("ALGORITMOS", objectName="Title"))
+        left_layout.addWidget(QLabel("Selecciona los algoritmos a comparar:", objectName="Sub"))
+        
+        self.list_algoritmos = QListWidget()
+        for nombre in ALGORITMOS_EJEMPLO.keys():
+            item = QListWidgetItem(nombre)
+            item.setFlags(item.flags() | Qt.ItemFlag.ItemIsUserCheckable)
+            item.setCheckState(Qt.CheckState.Unchecked)
+            self.list_algoritmos.addItem(item)
+        left_layout.addWidget(self.list_algoritmos)
 
-        # Selección de Algoritmo
-        left_layout.addWidget(QLabel("Selecciona un Algoritmo o Código Personalizado:"))
-        self.combo_algoritmos = QComboBox()
-        self.combo_algoritmos.addItems(list(ALGORITMOS_EJEMPLO.keys()))
-        self.combo_algoritmos.currentIndexChanged.connect(self.on_algoritmo_changed)
-        left_layout.addWidget(self.combo_algoritmos)
+        self.chk_personalizado = QCheckBox(" Incluir Código Personalizado")
+        self.chk_personalizado.toggled.connect(self.on_personalizado_toggled)
+        left_layout.addWidget(self.chk_personalizado)
 
-        # Editor de Código
-        self.lbl_codigo = QLabel("Código Python:")
-        left_layout.addWidget(self.lbl_codigo)
         self.editor_codigo = QTextEdit()
         self.editor_codigo.setPlainText(EJEMPLO_CODIGO_PERSONALIZADO)
+        self.editor_codigo.setVisible(False)
         left_layout.addWidget(self.editor_codigo)
 
-        # Tamaños de N
-        left_layout.addWidget(QLabel("Tamaños de Entrada N (separados por coma):"))
-        self.input_tamanos = QLineEdit()
-        self.input_tamanos.setText("100, 500, 1000, 2000")
+        left_layout.addWidget(QLabel("CONFIGURACIÓN", objectName="Title"))
+        left_layout.addWidget(QLabel("Tamaños de N (ej. 100, 500, 1000):", objectName="Sub"))
+        self.input_tamanos = QLineEdit("100, 500, 1000, 2000")
         left_layout.addWidget(self.input_tamanos)
 
-        # Opciones
-        self.chk_log_scale = QCheckBox(" Usar Escala Logarítmica en Gráfica")
+        self.chk_log_scale = QCheckBox(" Usar escala logarítmica")
         left_layout.addWidget(self.chk_log_scale)
 
-        # Botón Analizar
-        self.btn_analizar = QPushButton("🚀 ANALIZAR COMPLEJIDAD")
+        self.btn_analizar = QPushButton("🚀 Ejecutar Análisis")
+        self.btn_analizar.setObjectName("ActionBtn")
         self.btn_analizar.setCursor(Qt.CursorShape.PointingHandCursor)
         self.btn_analizar.clicked.connect(self.ejecutar_analisis)
         left_layout.addWidget(self.btn_analizar)
+
+        self.progress_bar = QProgressBar()
+        self.progress_bar.setVisible(False)
+        left_layout.addWidget(self.progress_bar)
         
-        # Etiqueta de estado
-        self.lbl_estado = QLabel("")
-        self.lbl_estado.setStyleSheet("color: #AAAAAA; font-weight: normal; font-size: 12px;")
+        self.lbl_estado = QLabel("Listo para analizar.")
+        self.lbl_estado.setObjectName("Sub")
         left_layout.addWidget(self.lbl_estado)
 
-        # ================= PANEL DERECHO (RESULTADOS) =================
+        # --- PANEL DERECHO ---
         right_panel = QWidget()
         right_layout = QVBoxLayout(right_panel)
         right_layout.setContentsMargins(0, 0, 0, 0)
-        right_layout.setSpacing(15)
 
-        # Tabla de resultados
-        right_layout.addWidget(QLabel("RESULTADOS DE EJECUCIÓN"))
-        self.tabla_resultados = QTableWidget(0, 0)
+        # Tabla
+        self.tabla_resultados = QTableWidget()
         self.tabla_resultados.setAlternatingRowColors(True)
         self.tabla_resultados.horizontalHeader().setSectionResizeMode(QHeaderView.ResizeMode.Stretch)
-        right_layout.addWidget(self.tabla_resultados)
+        right_layout.addWidget(self.tabla_resultados, 1)
 
-        # Contenedor para la gráfica
-        right_layout.addWidget(QLabel("GRÁFICA DE COMPLEJIDAD"))
-        self.graph_container = QWidget()
+        # Gráfica
+        self.graph_container = QFrame()
+        self.graph_container.setObjectName("ControlPanel")
         self.graph_layout = QVBoxLayout(self.graph_container)
-        self.graph_layout.setContentsMargins(0, 0, 0, 0)
-        self.graph_container.setStyleSheet("background-color: #1E1E1E; border: 1px solid #333333; border-radius: 6px;")
-        
-        # Le damos un tamaño mínimo para que se vea bien
-        self.graph_container.setMinimumHeight(400)
-        right_layout.addWidget(self.graph_container)
+        self.graph_layout.setContentsMargins(10, 10, 10, 10)
+        right_layout.addWidget(self.graph_container, 2)
 
-        # Agregar paneles al splitter
         splitter.addWidget(left_panel)
         splitter.addWidget(right_panel)
-        # Establecer proporciones iniciales (30% izq, 70% der)
-        splitter.setSizes([350, 850])
+        splitter.setSizes([400, 880])
 
-    def on_algoritmo_changed(self):
-        # Si no es código personalizado, deshabilitar el editor
-        seleccion = self.combo_algoritmos.currentText()
-        if seleccion == "Código Personalizado":
-            self.editor_codigo.setEnabled(True)
-            self.editor_codigo.setStyleSheet("background-color: #1E1E1E; color: #FFFFFF;")
-            self.input_tamanos.setText("100, 500, 1000, 2000")
-        else:
-            self.editor_codigo.setEnabled(False)
-            self.editor_codigo.setStyleSheet("background-color: #2A2A2A; color: #888888;")
-            # Si es fibonacci, bajar los tamaños por defecto
-            if "Fibonacci" in seleccion:
-                self.input_tamanos.setText("10, 20, 25")
-            else:
-                self.input_tamanos.setText("100, 500, 1000, 2000")
+    def on_personalizado_toggled(self, checked):
+        self.editor_codigo.setVisible(checked)
 
     def ejecutar_analisis(self):
-        # Validar tamaños
-        tamanos_txt = self.input_tamanos.text()
+        algos_seleccionados = {}
+        for i in range(self.list_algoritmos.count()):
+            item = self.list_algoritmos.item(i)
+            if item.checkState() == Qt.CheckState.Checked:
+                nombre = item.text()
+                algos_seleccionados[nombre] = ALGORITMOS_EJEMPLO[nombre]
+
+        if not algos_seleccionados and not self.chk_personalizado.isChecked():
+            QMessageBox.warning(self, "Atención", "Selecciona al menos un algoritmo.")
+            return
+
         try:
-            tamanos = [int(t.strip()) for t in tamanos_txt.split(',')]
+            tamanos = [int(t.strip()) for t in self.input_tamanos.text().split(',')]
             tamanos.sort()
-            if not tamanos or any(t <= 0 for t in tamanos):
-                raise ValueError()
         except ValueError:
-            QMessageBox.warning(self, "Error", "Por favor ingresa tamaños válidos (números enteros positivos separados por comas).")
+            QMessageBox.critical(self, "Error", "Formato de tamaños inválido.")
             return
 
-        nombre_algoritmo = self.combo_algoritmos.currentText()
-        funcion_algoritmo = ALGORITMOS_EJEMPLO[nombre_algoritmo]
-        codigo_personalizado = self.editor_codigo.toPlainText()
-
-        if funcion_algoritmo is None and not codigo_personalizado.strip():
-            QMessageBox.warning(self, "Error", "El código personalizado no puede estar vacío.")
-            return
-
-        # Preparar UI para ejecución
         self.btn_analizar.setEnabled(False)
-        self.lbl_estado.setText("Ejecutando análisis...")
-        self.tabla_resultados.clear()
-        self.tabla_resultados.setRowCount(0)
-        self.tabla_resultados.setColumnCount(0)
+        self.progress_bar.setVisible(True)
+        self.progress_bar.setValue(0)
         
         # Limpiar gráfica anterior
         for i in reversed(range(self.graph_layout.count())): 
-            widget = self.graph_layout.itemAt(i).widget()
-            if widget is not None:
-                widget.setParent(None)
+            self.graph_layout.itemAt(i).widget().setParent(None)
 
         config = {
-            'nombre': nombre_algoritmo,
-            'funcion': funcion_algoritmo,
-            'codigo': codigo_personalizado,
+            'algoritmos': algos_seleccionados,
+            'incluir_personalizado': self.chk_personalizado.isChecked(),
+            'codigo': self.editor_codigo.toPlainText(),
             'tamanos': tamanos
         }
 
@@ -330,62 +300,47 @@ class AnalizadorGUI(QMainWindow):
         self.thread.error_signal.connect(self.mostrar_error)
         self.thread.start()
 
-    def actualizar_progreso(self, msg):
+    def actualizar_progreso(self, val, msg):
+        self.progress_bar.setValue(val)
         self.lbl_estado.setText(msg)
 
     def mostrar_resultados(self, resultados, tamanos):
-        self.lbl_estado.setText("Análisis completado. Generando gráfica...")
-        
-        nombre_algoritmo = list(resultados.keys())[0]
-        tiempos = resultados[nombre_algoritmo]
-        
-        # Estimar Big O
-        big_o = estimar_complejidad(tamanos, tiempos)
+        self.progress_bar.setValue(100)
+        self.lbl_estado.setText("Generando visualización...")
 
         # Configurar Tabla
-        columnas = ["Algoritmo"] + [f"N={t}" for t in tamanos] + ["Big O Estimado"]
+        columnas = ["Algoritmo"] + [f"N={t}" for t in tamanos] + ["Big O"]
         self.tabla_resultados.setColumnCount(len(columnas))
+        self.tabla_resultados.setRowCount(len(resultados))
         self.tabla_resultados.setHorizontalHeaderLabels(columnas)
-        self.tabla_resultados.setRowCount(1)
 
-        self.tabla_resultados.setItem(0, 0, QTableWidgetItem(nombre_algoritmo))
-        for idx, t in enumerate(tiempos):
-            self.tabla_resultados.setItem(0, idx + 1, QTableWidgetItem(f"{t:.6f}s"))
-        
-        item_big_o = QTableWidgetItem(big_o)
-        item_big_o.setForeground(QColor("#F5A623")) # Naranja para destacar
-        # Hacer la fuente bold
-        font = item_big_o.font()
-        font.setBold(True)
-        item_big_o.setFont(font)
-        
-        self.tabla_resultados.setItem(0, len(tamanos) + 1, item_big_o)
+        for row, (nombre, tiempos) in enumerate(resultados.items()):
+            self.tabla_resultados.setItem(row, 0, QTableWidgetItem(nombre))
+            for col, t in enumerate(tiempos):
+                self.tabla_resultados.setItem(row, col + 1, QTableWidgetItem(f"{t:.6f}s"))
+            
+            big_o = estimar_complejidad(tamanos, tiempos)
+            item_bo = QTableWidgetItem(big_o)
+            item_bo.setForeground(QColor("#38BDF8"))
+            item_bo.setFont(QFont("Segoe UI", 10, QFont.Weight.Bold))
+            self.tabla_resultados.setItem(row, len(tamanos) + 1, item_bo)
 
-        # Generar Gráfica
-        escala_log = self.chk_log_scale.isChecked()
-        
-        try:
-            fig = graficar_resultados(resultados, tamanos, escala_logaritmica=escala_log, return_fig=True)
-            canvas = FigureCanvasQTAgg(fig)
-            self.graph_layout.addWidget(canvas)
-        except Exception as e:
-            self.mostrar_error(f"Error al generar la gráfica: {str(e)}")
+        # Gráfica
+        fig = graficar_resultados(resultados, tamanos, self.chk_log_scale.isChecked(), return_fig=True)
+        canvas = FigureCanvasQTAgg(fig)
+        self.graph_layout.addWidget(canvas)
 
-        self.lbl_estado.setText("Listo.")
         self.btn_analizar.setEnabled(True)
+        self.lbl_estado.setText("Análisis finalizado.")
 
-    def mostrar_error(self, error_msg):
-        self.lbl_estado.setText("Error en la ejecución.")
+    def mostrar_error(self, err):
         self.btn_analizar.setEnabled(True)
-        QMessageBox.critical(self, "Error de Ejecución", error_msg)
-
+        self.progress_bar.setVisible(False)
+        QMessageBox.critical(self, "Error Crítico", err)
 
 if __name__ == "__main__":
     app = QApplication(sys.argv)
-    
-    # Aplicar un estilo base oscuro
     app.setStyle("Fusion")
-    
-    window = AnalizadorGUI()
-    window.show()
+    win = AnalizadorGUI()
+    win.show()
     sys.exit(app.exec())

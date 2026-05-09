@@ -16,9 +16,9 @@ def estimar_complejidad(tamanos, tiempos):
         "O(log n)": lambda x: np.log2(x),
         "O(n)": lambda x: x,
         "O(n log n)": lambda x: x * np.log2(x),
-        "O(n²)": lambda x: x**2,
-        "O(n³)": lambda x: x**3,
-        "O(2ⁿ)": lambda x: np.clip(2.0**np.clip(x, None, 100), 0, 1e308) # Evitar overflow
+        "O(n^2)": lambda x: x**2,
+        "O(n^3)": lambda x: x**3,
+        "O(2^n)": lambda x: np.clip(2.0**np.clip(x, None, 100), 0, 1e308) # Evitar overflow
     }
     
     mejor_r2 = -float('inf')
