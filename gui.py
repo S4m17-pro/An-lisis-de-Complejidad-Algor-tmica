@@ -279,6 +279,25 @@ class AnalizadorGUI(QMainWindow):
             QMessageBox.critical(self, "Error", "Formato de tamaños inválido.")
             return
 
+        # --- PROTECCIÓN DE SEGURIDAD ---
+        # Si se selecciona Fibonacci Recursivo con N > 35, el programa se colgaría.
+        if any("Recursivo" in nombre for nombre in algos_seleccionados.keys()):
+            if any(t > 35 for t in tamanos):
+                msg_box = QMessageBox(self)
+                msg_box.setIcon(QMessageBox.Icon.Warning)
+                msg_box.setWindowTitle("¡Peligro de Rendimiento!")
+                msg_box.setText("Has seleccionado 'Fibonacci Recursivo' con tamaños de N mayores a 35.")
+                msg_box.setInformativeText(
+                    "Este algoritmo tiene complejidad exponencial O(2ⁿ). Con N=100, tardaría años en terminar.\n\n"
+                    "¿Deseas continuar bajo tu propio riesgo o cancelar para ajustar los tamaños a algo menor (ej. 20)? "
+                )
+                msg_box.setStandardButtons(QMessageBox.StandardButton.Ok | QMessageBox.StandardButton.Cancel)
+                msg_box.setDefaultButton(QMessageBox.StandardButton.Cancel)
+                
+                if msg_box.exec() == QMessageBox.StandardButton.Cancel:
+                    return
+        # -------------------------------
+
         self.btn_analizar.setEnabled(False)
         self.progress_bar.setVisible(True)
         self.progress_bar.setValue(0)
