@@ -2,8 +2,8 @@ import sys
 import traceback
 from PyQt6.QtWidgets import (
     QApplication, QMainWindow, QWidget, QVBoxLayout, QHBoxLayout,
-    QLabel, QListWidget, QListWidgetItem, QTextEdit, QLineEdit, 
-    QCheckBox, QPushButton, QTableWidget, QTableWidgetItem, 
+    QLabel, QListWidget, QListWidgetItem, QTextEdit, QLineEdit,
+    QCheckBox, QPushButton, QTableWidget, QTableWidgetItem,
     QHeaderView, QSplitter, QMessageBox, QFrame, QProgressBar
 )
 from PyQt6.QtCore import Qt, QThread, pyqtSignal, QSize
@@ -12,6 +12,7 @@ from PyQt6.QtGui import QFont, QColor, QPalette, QIcon
 import matplotlib
 matplotlib.use('QtAgg')
 from matplotlib.backends.backend_qtagg import FigureCanvasQTAgg
+from matplotlib.backends.backend_qt import NavigationToolbar2QT  # <-- AGREGADO
 
 # Importar lógica del proyecto
 from utils import generar_dataset
@@ -39,9 +40,10 @@ for i in range(n):
     pass
 """
 
+
 class WorkerThread(QThread):
-    progress_signal = pyqtSignal(int, str) # progreso %, mensaje
-    result_signal = pyqtSignal(dict, list) # resultados dict, tamanos list
+    progress_signal = pyqtSignal(int, str)  # progreso %, mensaje
+    result_signal = pyqtSignal(dict, list)  # resultados dict, tamanos list
     error_signal = pyqtSignal(str)
 
     def __init__(self, config):
@@ -56,7 +58,7 @@ class WorkerThread(QThread):
             tamanos = self.config['tamanos']
 
             resultados = {}
-            
+
             # Preparar lista de tareas
             tareas = []
             for nombre, func in algoritmos_seleccionados.items():
@@ -69,11 +71,11 @@ class WorkerThread(QThread):
 
             for tamano in tamanos:
                 dataset_base = generar_dataset(tamano, "aleatorio")
-                
+
                 for nombre, funcion in tareas:
                     msg = f"Ejecutando {nombre} (N={tamano})..."
                     self.progress_signal.emit(int((paso_actual / total_pasos) * 100), msg)
-                    
+
                     if nombre not in resultados:
                         resultados[nombre] = []
 
@@ -85,11 +87,11 @@ class WorkerThread(QThread):
                     else:
                         dataset_actual = dataset_base[:]
 
-                    if funcion is None: # Código personalizado
+                    if funcion is None:  # Código personalizado
                         tiempo = ejecutar_codigo_personalizado(codigo_personalizado, dataset_actual)
                     else:
                         tiempo = medir_tiempo(funcion, dataset_actual)
-                    
+
                     resultados[nombre].append(tiempo)
                     paso_actual += 1
 
@@ -111,16 +113,16 @@ class AnalizadorGUI(QMainWindow):
         self.setStyleSheet("""
             QMainWindow { background-color: #0F172A; }
             QWidget { font-family: 'Segoe UI', system-ui, sans-serif; color: #F8FAFC; }
-            
-            QFrame#ControlPanel { 
-                background-color: #1E293B; 
-                border-radius: 12px; 
+
+            QFrame#ControlPanel {
+                background-color: #1E293B;
+                border-radius: 12px;
                 border: 1px solid #334155;
             }
-            
+
             QLabel#Title { font-size: 20px; font-weight: 800; color: #38BDF8; margin-bottom: 10px; }
             QLabel#Sub { color: #94A3B8; font-size: 13px; font-weight: 400; }
-            
+
             QListWidget {
                 background-color: #0F172A;
                 border: 1px solid #334155;
@@ -131,7 +133,7 @@ class AnalizadorGUI(QMainWindow):
             QListWidget::item { padding: 8px; border-radius: 4px; margin: 2px; }
             QListWidget::item:hover { background-color: #1E293B; }
             QListWidget::item:selected { background-color: #38BDF8; color: #0F172A; font-weight: bold; }
-            
+
             QLineEdit, QTextEdit {
                 background-color: #0F172A;
                 border: 1px solid #334155;
@@ -139,7 +141,7 @@ class AnalizadorGUI(QMainWindow):
                 padding: 10px;
                 selection-background-color: #38BDF8;
             }
-            
+
             QPushButton#ActionBtn {
                 background-color: #0EA5E9;
                 color: white;
@@ -152,7 +154,7 @@ class AnalizadorGUI(QMainWindow):
             QPushButton#ActionBtn:hover { background-color: #0284C7; }
             QPushButton#ActionBtn:pressed { background-color: #075985; }
             QPushButton#ActionBtn:disabled { background-color: #334155; color: #64748B; }
-            
+
             QTableWidget {
                 background-color: #1E293B;
                 border: 1px solid #334155;
@@ -166,7 +168,7 @@ class AnalizadorGUI(QMainWindow):
                 border: none;
                 font-weight: bold;
             }
-            
+
             QProgressBar {
                 border: 1px solid #334155;
                 border-radius: 5px;
@@ -174,6 +176,37 @@ class AnalizadorGUI(QMainWindow):
                 background-color: #0F172A;
             }
             QProgressBar::chunk { background-color: #38BDF8; border-radius: 4px; }
+
+            /* Estilos para la toolbar de Matplotlib */
+            QToolBar {
+                background-color: #1E293B;
+                border: none;
+                border-bottom: 1px solid #334155;
+                padding: 4px;
+                spacing: 4px;
+            }
+            QToolBar QToolButton {
+                background-color: transparent;
+                border: 1px solid transparent;
+                border-radius: 6px;
+                padding: 4px 6px;
+                color: #94A3B8;
+            }
+            QToolBar QToolButton:hover {
+                background-color: #334155;
+                border-color: #475569;
+                color: #F8FAFC;
+            }
+            QToolBar QToolButton:pressed {
+                background-color: #0EA5E9;
+                border-color: #0284C7;
+                color: white;
+            }
+            QToolBar QToolButton:checked {
+                background-color: #0EA5E9;
+                border-color: #0284C7;
+                color: white;
+            }
         """)
 
     def init_ui(self):
@@ -195,7 +228,7 @@ class AnalizadorGUI(QMainWindow):
 
         left_layout.addWidget(QLabel("ALGORITMOS", objectName="Title"))
         left_layout.addWidget(QLabel("Selecciona los algoritmos a comparar:", objectName="Sub"))
-        
+
         self.list_algoritmos = QListWidget()
         for nombre in ALGORITMOS_EJEMPLO.keys():
             item = QListWidgetItem(nombre)
@@ -230,7 +263,7 @@ class AnalizadorGUI(QMainWindow):
         self.progress_bar = QProgressBar()
         self.progress_bar.setVisible(False)
         left_layout.addWidget(self.progress_bar)
-        
+
         self.lbl_estado = QLabel("Listo para analizar.")
         self.lbl_estado.setObjectName("Sub")
         left_layout.addWidget(self.lbl_estado)
@@ -251,6 +284,7 @@ class AnalizadorGUI(QMainWindow):
         self.graph_container.setObjectName("ControlPanel")
         self.graph_layout = QVBoxLayout(self.graph_container)
         self.graph_layout.setContentsMargins(10, 10, 10, 10)
+        self.graph_layout.setSpacing(0)  # toolbar y canvas sin separación
         right_layout.addWidget(self.graph_container, 2)
 
         splitter.addWidget(left_panel)
@@ -280,7 +314,6 @@ class AnalizadorGUI(QMainWindow):
             return
 
         # --- PROTECCIÓN DE SEGURIDAD ---
-        # Si se selecciona Fibonacci Recursivo con N > 35, el programa se colgaría.
         if any("Recursivo" in nombre for nombre in algos_seleccionados.keys()):
             if any(t > 35 for t in tamanos):
                 msg_box = QMessageBox(self)
@@ -289,11 +322,11 @@ class AnalizadorGUI(QMainWindow):
                 msg_box.setText("Has seleccionado 'Fibonacci Recursivo' con tamaños de N mayores a 35.")
                 msg_box.setInformativeText(
                     "Este algoritmo tiene complejidad exponencial O(2ⁿ). Con N=100, tardaría años en terminar.\n\n"
-                    "¿Deseas continuar bajo tu propio riesgo o cancelar para ajustar los tamaños a algo menor (ej. 20)? "
+                    "¿Deseas continuar bajo tu propio riesgo o cancelar para ajustar los tamaños a algo menor (ej. 20)?"
                 )
                 msg_box.setStandardButtons(QMessageBox.StandardButton.Ok | QMessageBox.StandardButton.Cancel)
                 msg_box.setDefaultButton(QMessageBox.StandardButton.Cancel)
-                
+
                 if msg_box.exec() == QMessageBox.StandardButton.Cancel:
                     return
         # -------------------------------
@@ -301,10 +334,12 @@ class AnalizadorGUI(QMainWindow):
         self.btn_analizar.setEnabled(False)
         self.progress_bar.setVisible(True)
         self.progress_bar.setValue(0)
-        
-        # Limpiar gráfica anterior
-        for i in reversed(range(self.graph_layout.count())): 
-            self.graph_layout.itemAt(i).widget().setParent(None)
+
+        # Limpiar toolbar y gráfica anterior
+        for i in reversed(range(self.graph_layout.count())):
+            widget = self.graph_layout.itemAt(i).widget()
+            if widget is not None:
+                widget.setParent(None)
 
         config = {
             'algoritmos': algos_seleccionados,
@@ -337,17 +372,23 @@ class AnalizadorGUI(QMainWindow):
             self.tabla_resultados.setItem(row, 0, QTableWidgetItem(nombre))
             for col, t in enumerate(tiempos):
                 self.tabla_resultados.setItem(row, col + 1, QTableWidgetItem(f"{t:.6f}s"))
-            
+
             big_o = estimar_complejidad(tamanos, tiempos)
             item_bo = QTableWidgetItem(big_o)
             item_bo.setForeground(QColor("#38BDF8"))
             item_bo.setFont(QFont("Segoe UI", 10, QFont.Weight.Bold))
             self.tabla_resultados.setItem(row, len(tamanos) + 1, item_bo)
 
-        # Gráfica
+        # Gráfica con toolbar interactiva
         fig = graficar_resultados(resultados, tamanos, self.chk_log_scale.isChecked(), return_fig=True)
+
         canvas = FigureCanvasQTAgg(fig)
-        self.graph_layout.addWidget(canvas)
+        canvas.setFocusPolicy(Qt.FocusPolicy.StrongFocus)   # recibe scroll y teclado
+
+        toolbar = NavigationToolbar2QT(canvas, self.graph_container)
+
+        self.graph_layout.addWidget(toolbar)   # toolbar primero (arriba)
+        self.graph_layout.addWidget(canvas)    # canvas debajo
 
         self.btn_analizar.setEnabled(True)
         self.lbl_estado.setText("Análisis finalizado.")
@@ -356,6 +397,7 @@ class AnalizadorGUI(QMainWindow):
         self.btn_analizar.setEnabled(True)
         self.progress_bar.setVisible(False)
         QMessageBox.critical(self, "Error Crítico", err)
+
 
 if __name__ == "__main__":
     app = QApplication(sys.argv)
